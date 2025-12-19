@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 def build_vocab(series):
@@ -26,3 +27,17 @@ def featurize_and_split(df, test_frac=0.2, seed=42):
     eval_df = df.iloc[split:]
 
     return train_df, eval_df, user_vocab, item_vocab
+
+def build_ranking_features(user_idx, item_idx, mf_model):
+    """
+    Construct ranking features for (user, item).
+    """
+    u = mf_model["user_embeddings"][user_idx]
+    i = mf_model["item_embeddings"][item_idx]
+
+    features = {
+        "dot": float(np.dot(u, i)),
+        "u_norm": float(np.linalg.norm(u)),
+        "i_norm": float(np.linalg.norm(i))
+    }
+    return features

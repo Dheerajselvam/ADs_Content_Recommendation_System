@@ -1,5 +1,5 @@
 import pandas as pd
-from featurize import featurize_and_split
+from feature_builder import featurize_and_split
 
 RAW = "data/raw/interactions.csv"
 OUT_TRAIN = "data/processed/train.csv"
