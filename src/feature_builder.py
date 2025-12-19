@@ -14,10 +14,12 @@ def featurize_and_split(df, test_frac=0.2, seed=42):
     # Build vocabularies
     user_vocab = build_vocab(df["user_id"])
     item_vocab = build_vocab(df["item_id"])
+    cat_vocab = build_vocab(df["category"])
 
     # Apply vocab
     df["user_idx"] = apply_vocab(df["user_id"], user_vocab)
     df["item_idx"] = apply_vocab(df["item_id"], item_vocab)
+    df["cat_idx"] = apply_vocab(df["category"], cat_vocab)
 
     # Shuffle
     df = df.sample(frac=1, random_state=seed).reset_index(drop=True)
@@ -28,16 +30,49 @@ def featurize_and_split(df, test_frac=0.2, seed=42):
 
     return train_df, eval_df, user_vocab, item_vocab
 
-def build_ranking_features(user_idx, item_idx, mf_model):
-    """
-    Construct ranking features for (user, item).
-    """
-    u = mf_model["user_embeddings"][user_idx]
-    i = mf_model["item_embeddings"][item_idx]
+def build_stats(df):
+    # Item popularity & CTR
 
-    features = {
+    item_stats = df.groupby("item_idx").agg(
+        item_clicks=("clicked", "sum"),
+        item_impr=("clicked", "count")
+    )
+    item_stats["item_ctr"] = item_stats["item_clicks"] / item_stats["item_impr"]
+
+    user_stats = df.groupby("user_idx").agg(
+        user_clicks=("clicked", "sum"),
+        user_impr=("clicked", "count")
+    )
+    user_stats["user_ctr"] = user_stats["user_clicks"] / user_stats["user_impr"]
+
+    cat_stats = df.groupby("category").agg(
+        cat_clicks=("clicked", "sum"),
+        cat_impr=("clicked", "count")
+    )
+    cat_stats["cat_ctr"] = cat_stats["cat_clicks"] / cat_stats["cat_impr"]
+
+    return item_stats, user_stats, cat_stats
+
+
+def build_ranking_features(row, model, item_stats, user_stats, cat_stats):
+    u = model["user_embeddings"][row.user_idx]
+    i = model["item_embeddings"][row.item_idx]
+
+    feats = {
         "dot": float(np.dot(u, i)),
         "u_norm": float(np.linalg.norm(u)),
-        "i_norm": float(np.linalg.norm(i))
+        "i_norm": float(np.linalg.norm(i)),
+        "item_ctr": item_stats.loc[row.item_idx]["item_ctr"]
+            if row.item_idx in item_stats.index else 0.0,
+        "user_ctr": user_stats.loc[row.user_idx]["user_ctr"]
+            if row.user_idx in user_stats.index else 0.0,
+        "cat_ctr": cat_stats.loc[row.category]["cat_ctr"]
+            if row.category in cat_stats.index else 0.0,
+        "popularity": item_stats.loc[row.item_idx]["item_impr"]
+            if row.item_idx in item_stats.index else 0,
+        "clicked": row.clicked,
+        "user_idx": row.user_idx,
+        "item_idx": row.item_idx
     }
-    return features
+    return feats
+

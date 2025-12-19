@@ -1,40 +1,30 @@
 import numpy as np
-import pandas as pd
-from sklearn.decomposition import TruncatedSVD
-import joblib
-from pathlib import Path
 
-MODEL_OUT = "models/mf_model.pkl"
+def train_mf(df, factors=32, lr=0.05, epochs=5):
+    users = df["user_idx"].nunique()
+    items = df["item_idx"].nunique()
 
-def train_mf(train_df, n_factors=32):
-    """
-    Matrix Factorization using SVD on user-item interaction matrix.
-    """
-    user_item = train_df.pivot_table(
-        index="user_idx",
-        columns="item_idx",
-        values="clicked",
-        fill_value=0
-    )
+    U = np.random.normal(0, 0.1, (users, factors))
+    V = np.random.normal(0, 0.1, (items, factors))
+    bu = np.zeros(users)
+    bi = np.zeros(items)
+    mu = df["clicked"].mean()
 
-    svd = TruncatedSVD(n_components=n_factors, random_state=42)
-    user_emb = svd.fit_transform(user_item)
-    item_emb = svd.components_.T
+    for _ in range(epochs):
+        for r in df.itertuples():
+            u, i, y = r.user_idx, r.item_idx, r.clicked
+            pred = mu + bu[u] + bi[i] + np.dot(U[u], V[i])
+            err = y - pred
 
-    model = {
-        "user_embeddings": user_emb,
-        "item_embeddings": item_emb
-    }
+            bu[u] += lr * err
+            bi[i] += lr * err
+            U[u] += lr * err * V[i]
+            V[i] += lr * err * U[u]
 
-    Path("models").mkdir(exist_ok=True)
-    joblib.dump(model, MODEL_OUT)
-    print("✅ MF model saved:", MODEL_OUT)
     return {
-    "mf_model": model,
-    "user_embeddings": user_emb,
-    "item_embeddings": item_emb
+        "user_embeddings": U,
+        "item_embeddings": V,
+        "user_bias": bu,
+        "item_bias": bi,
+        "global_bias": mu
     }
-
-if __name__ == "__main__":
-    df = pd.read_csv("data/processed/train.csv")
-    train_mf(df)
