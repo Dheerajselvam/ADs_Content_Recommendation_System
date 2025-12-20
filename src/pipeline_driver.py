@@ -16,6 +16,7 @@ from cold_start import is_new_user, cold_start_candidates
 from bandit import EpsilonGreedy
 from online_simulator import simulate_user_feedback
 from hybrid_embeddings import build_hybrid_embeddings
+from online_loop import run_online_loop
 pd.set_option('future.no_silent_downcasting', True)
 
 
@@ -217,6 +218,18 @@ def helper(model, ranker_type):
         online_ctr.append(sum(rewards)/len(rewards))
 
     print("📈 Online CTR:", np.mean(online_ctr))
+
+    # -------------------------
+    # Step 10: Online Feedback
+    # -------------------------
+
+    print("🚀 Starting Online Loop Simulation...")
+    ctr_curve = run_online_loop(
+            ranking_df=ranking_df,
+            item_stats=item_stats,
+            num_steps=1000
+        )
+    print(ctr_curve)
 
 if __name__ == "__main__":
     run(cf_type="Hybrid", ranker_type="gbdt")

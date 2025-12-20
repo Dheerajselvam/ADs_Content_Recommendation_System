@@ -5,6 +5,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import os
+import pickle
 
 class TransformerRec(nn.Module):
     def __init__(self, num_items, embed_dim=64, n_heads=4):
@@ -23,35 +25,41 @@ class TransformerRec(nn.Module):
         return h[:, -1, :]              # user embedding
 
 
+MODEL = "models\tf_model.pkl"
 
 def train_transformer(train_df, epochs=5, lr=1e-3):
-    num_users = train_df["user_idx"].nunique()
-    num_items = train_df["item_idx"].nunique()
-    model = TransformerRec(num_items)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    loss_fn = nn.BCEWithLogitsLoss()
+    if os.path.isfile(MODEL):
+        with open(MODEL, 'rb') as file:
+            model = pickle.load(file)
+    
+    else:
+        num_users = train_df["user_idx"].nunique()
+        num_items = train_df["item_idx"].nunique()
+        model = TransformerRec(num_items)
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+        loss_fn = nn.BCEWithLogitsLoss()
 
-    for epoch in range(epochs):
-        total_loss = 0
-        for row in train_df.itertuples():
-            user_seq = torch.tensor([row.item_idx]).unsqueeze(0)
-            label = torch.tensor([row.clicked], dtype=torch.float)
+        for epoch in range(epochs):
+            total_loss = 0
+            for row in train_df.itertuples():
+                user_seq = torch.tensor([row.item_idx]).unsqueeze(0)
+                label = torch.tensor([row.clicked], dtype=torch.float)
 
-            user_emb = model(user_seq)               # [1, D]
-            item_emb = model.item_emb(user_seq)      # [1, 1, D]
-            item_emb = item_emb.squeeze(1)           # [1, D]
+                user_emb = model(user_seq)               # [1, D]
+                item_emb = model.item_emb(user_seq)      # [1, 1, D]
+                item_emb = item_emb.squeeze(1)           # [1, D]
 
-            score = (user_emb * item_emb).sum(dim=1) # [1]
+                score = (user_emb * item_emb).sum(dim=1) # [1]
 
-            loss = loss_fn(score, label)
+                loss = loss_fn(score, label)
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            total_loss += loss.item()
+                total_loss += loss.item()
 
-        print(f"Epoch {epoch}: loss={total_loss:.4f}")
+            print(f"Epoch {epoch}: loss={total_loss:.4f}")
     
     item_embeddings = model.item_emb.weight.detach().numpy()
     user_embeddings = np.random.randn(num_users, item_embeddings.shape[1])
