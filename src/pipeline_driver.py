@@ -15,6 +15,7 @@ from transformer_model import train_transformer
 from cold_start import is_new_user, cold_start_candidates
 from bandit import EpsilonGreedy
 from online_simulator import simulate_user_feedback
+from hybrid_embeddings import build_hybrid_embeddings
 pd.set_option('future.no_silent_downcasting', True)
 
 
@@ -77,8 +78,14 @@ def run(cf_type = "RNN", ranker_type = "lr"):
         print(f"TF model saved at {tf_model_path}")
         helper(model, ranker_type)
     else:
-        for type in ["MF", "NCF", "RNN", "Transformer"]:
-            run(type)
+        models = {
+                "MF": train_mf(train_df),
+                "NCF": train_ncf(train_df),
+                "RNN": train_rnn(train_df),
+                "Transformer": train_transformer(train_df),
+            }
+        hybrid_model = build_hybrid_embeddings(models)
+        helper(hybrid_model, ranker_type)
 
     
 
@@ -172,6 +179,23 @@ def helper(model, ranker_type):
     print(metrics)
 
     # -------------------------
+    # Step 8.5: Multi-objective re-ranking
+    # -------------------------
+
+    ALPHA = 0.5   # CTR
+    BETA  = 0.2   # Engagement
+    GAMMA = 0.2   # Monetization
+    DELTA = 0.1   # Freshness
+
+    ranking_df["final_score"] = (
+        ALPHA * ranking_df["score"] +
+        BETA  * ranking_df["engagement"] +
+        GAMMA * ranking_df["monetization"] +
+        DELTA * ranking_df["freshness"]
+    )
+
+
+    # -------------------------
     # Step 9: Evaluate Online Ranking model
     # -------------------------
 
@@ -183,7 +207,7 @@ def helper(model, ranker_type):
         else:
             ranked = (
                 ranking_df[ranking_df.user_idx == user_id]
-                .sort_values("score", ascending=False)
+                .sort_values("final_score", ascending=False)
                 ["item_idx"]
                 .tolist()
             )
@@ -195,4 +219,4 @@ def helper(model, ranker_type):
     print("📈 Online CTR:", np.mean(online_ctr))
 
 if __name__ == "__main__":
-    run(cf_type="RNN", ranker_type="nn")
+    run(cf_type="Hybrid", ranker_type="gbdt")

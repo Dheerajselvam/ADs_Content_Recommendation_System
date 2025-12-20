@@ -58,21 +58,43 @@ def build_ranking_features(row, model, item_stats, user_stats, cat_stats):
     u = model["user_embeddings"][row.user_idx]
     i = model["item_embeddings"][row.item_idx]
 
-    feats = {
-        "dot": float(np.dot(u, i)),
-        "u_norm": float(np.linalg.norm(u)),
-        "i_norm": float(np.linalg.norm(i)),
-        "item_ctr": item_stats.loc[row.item_idx]["item_ctr"]
-            if row.item_idx in item_stats.index else 0.0,
-        "user_ctr": user_stats.loc[row.user_idx]["user_ctr"]
-            if row.user_idx in user_stats.index else 0.0,
-        "cat_ctr": cat_stats.loc[row.category]["cat_ctr"]
-            if row.category in cat_stats.index else 0.0,
-        "popularity": item_stats.loc[row.item_idx]["item_impr"]
-            if row.item_idx in item_stats.index else 0,
-        "clicked": row.clicked,
-        "user_idx": row.user_idx,
-        "item_idx": row.item_idx
-    }
-    return feats
+    # --- Base CF signals ---
+    dot = float(np.dot(u, i))
+
+    # --- CTR stats ---
+    item_ctr = item_stats.loc[row.item_idx]["item_ctr"] if row.item_idx in item_stats.index else 0.0
+    user_ctr = user_stats.loc[row.user_idx]["user_ctr"] if row.user_idx in user_stats.index else 0.0
+    cat_ctr = cat_stats.loc[row.category]["cat_ctr"] if row.category in cat_stats.index else 0.0
+
+    # --- Engagement proxy ---
+    engagement_score = (
+        0.6 * cat_ctr +
+        0.4 * np.log1p(item_stats.loc[row.item_idx]["item_impr"])
+        if row.item_idx in item_stats.index else 0.0
+    )
+
+    # --- Monetization proxy ---
+    monetization_score = (
+        item_stats.loc[row.item_idx]["item_value"]
+        if "item_value" in item_stats.columns else 0.0
+    )
+
+    # --- Freshness proxy ---
+    recency = np.exp(-(pd.Timestamp.now().timestamp() - row.timestamp) / 86400)
+
+    return {
+            "dot": dot,
+            "u_norm": float(np.linalg.norm(u)),
+            "i_norm": float(np.linalg.norm(i)),
+            "item_ctr": item_ctr,
+            "user_ctr": user_ctr,
+            "cat_ctr": cat_ctr,
+            "engagement": engagement_score,
+            "monetization": monetization_score,
+            "freshness": recency,
+            "clicked": row.clicked,
+            "user_idx": row.user_idx,
+            "item_idx": row.item_idx,
+        }
+
 
