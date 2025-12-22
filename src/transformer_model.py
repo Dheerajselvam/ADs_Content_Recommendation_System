@@ -38,7 +38,7 @@ def train_transformer(train_df, epochs=5, lr=1e-3):
         num_users = train_df["user_idx"].nunique()
         num_items = train_df["item_idx"].nunique()
 
-        model = TransformerRec(num_items)
+        model = TransformerRec(num_users, num_items)
         optimizer = optim.Adam(model.parameters(), lr=lr)
         loss_fn = nn.BCEWithLogitsLoss()
 

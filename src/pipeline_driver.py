@@ -3,7 +3,7 @@ import joblib
 from pathlib import Path
 import numpy as np
 
-from feature_builder import featurize_and_split, build_ranking_features, build_stats
+from feature_builder import featurize_and_split, build_ranking_features, build_stats, create_ranking_df
 from mf_model import train_mf
 from candidate_gen import generate_candidates
 from ranking_model import train_ranking_model
@@ -127,13 +127,10 @@ def helper(model, ranker_type):
     # -------------------------
     # Step 6: Build ranking features
     # -------------------------
-    item_stats, user_stats, cat_stats = build_stats(train_df)
-    ranking_features = []
-    for row in candidates_eval.itertuples():
-        feats = build_ranking_features(row, model, item_stats, user_stats, cat_stats)
-        ranking_features.append(feats)
-    ranking_df = pd.DataFrame(ranking_features)
-    print(f"Ranking features constructed: {ranking_df.shape}")
+    ranking_df_train = create_ranking_df(train_df, model, candidates_eval)
+    ranking_df_eval = create_ranking_df(eval_df, model, candidates_eval)
+    item_stats, user_stats, cat_stats = build_stats(eval_df)
+    print(f"Ranking features constructed: {ranking_df_train.shape}")
 
     # -------------------------
     # Step 7: Train ranking model
@@ -141,7 +138,7 @@ def helper(model, ranker_type):
     ranking_model_path = f"{MODELS_DIR}/ranking_model.pkl"
     print("Training ranking model...")
     ranking_model = train_ranking_model(
-        ranking_df,
+        ranking_df_train,
         feature_cols = [
                         "dot",
                         "u_norm",
@@ -159,7 +156,7 @@ def helper(model, ranker_type):
     # Step 8: Evaluate ranking model
     # -------------------------
     print("Evaluating ranking model...")
-    ranking_scores = ranking_model.predict(ranking_df[[
+    ranking_scores = ranking_model.predict(ranking_df_eval[[
                         "dot",
                         "u_norm",
                         "i_norm",
@@ -167,10 +164,10 @@ def helper(model, ranker_type):
                         "cat_ctr",
                         "user_ctr"
                         ]])
-    ranking_df["score"] = ranking_scores
+    ranking_df_eval["score"] = ranking_scores
 
     metrics = evaluate_ranking(
-        ranking_df,
+        ranking_df_eval,
         score_col="score",
         label_col="clicked",
         k=10
@@ -188,11 +185,11 @@ def helper(model, ranker_type):
     GAMMA = 0.2   # Monetization
     DELTA = 0.1   # Freshness
 
-    ranking_df["final_score"] = (
-        ALPHA * ranking_df["score"] +
-        BETA  * ranking_df["engagement"] +
-        GAMMA * ranking_df["monetization"] +
-        DELTA * ranking_df["freshness"]
+    ranking_df_eval["final_score"] = (
+        ALPHA * ranking_df_eval["score"] +
+        BETA  * ranking_df_eval["engagement"] +
+        GAMMA * ranking_df_eval["monetization"] +
+        DELTA * ranking_df_eval["freshness"]
     )
 
 
@@ -207,7 +204,7 @@ def helper(model, ranker_type):
             ranked = cold_start_candidates(user_id, item_stats)
         else:
             ranked = (
-                ranking_df[ranking_df.user_idx == user_id]
+                ranking_df_eval[ranking_df_eval.user_idx == user_id]
                 .sort_values("final_score", ascending=False)
                 ["item_idx"]
                 .tolist()
@@ -225,7 +222,7 @@ def helper(model, ranker_type):
 
     print("🚀 Starting Online Loop Simulation...")
     ctr_curve = run_online_loop(
-            ranking_df=ranking_df,
+            ranking_df=ranking_df_eval,
             item_stats=item_stats,
             num_steps=1000
         )

@@ -98,3 +98,11 @@ def build_ranking_features(row, model, item_stats, user_stats, cat_stats):
         }
 
 
+def create_ranking_df(df, model, candidates_eval):
+    item_stats, user_stats, cat_stats = build_stats(df)
+    ranking_features = []
+    for row in candidates_eval.itertuples():
+        feats = build_ranking_features(row, model, item_stats, user_stats, cat_stats)
+        ranking_features.append(feats)
+    ranking_df = pd.DataFrame(ranking_features)
+    return ranking_df
