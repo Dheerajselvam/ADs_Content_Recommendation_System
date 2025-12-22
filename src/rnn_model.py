@@ -3,13 +3,13 @@ import torch.nn as nn
 import numpy as np
 
 class RNNRec(nn.Module):
-    def __init__(self, num_items, emb_dim=64):
+    def __init__(self, num_users, num_items, emb_dim=64):
         super().__init__()
         self.item_emb = nn.Embedding(num_items, emb_dim)
         self.user_emb = nn.Embedding(num_users, emb_dim)
         self.rnn = nn.GRU(emb_dim, emb_dim, batch_first=True)
 
-    def forward(self, seq):
+    def forward(self, seq, user_idx):
         emb = self.item_emb(seq)
         _, h = self.rnn(emb)
         h = h.squeeze(0)
@@ -22,7 +22,7 @@ def train_rnn(train_df, emb_dim=64, epochs=5):
     num_users = train_df["user_idx"].nunique()
     num_items = train_df["item_idx"].nunique()
 
-    model = RNNRec(num_items, emb_dim)
+    model = RNNRec(num_users, num_items, emb_dim)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.CrossEntropyLoss()
 
